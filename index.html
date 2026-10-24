@@ -12,21 +12,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Photobooth">
-  <meta name="theme-color" content="#0a0812">
+  <meta name="theme-color" content="#000000">
 
-  <!-- Générateur de QR Code autonome -->
+  <!-- Librairie QR Code -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
   <style>
     :root {
-      --bg: #0a0812;
-      --card-bg: rgba(26, 20, 38, 0.85);
       --orange: #ff7518;
-      --orange-glow: #ff9442;
-      --purple: #3d145a;
-      --text: #f5f3f7;
-      --green: #2ecc71;
-      --red: #e74c3c;
+      --orange-glow: #ff9d47;
+      --purple-dark: #1f0b2e;
     }
 
     * {
@@ -38,328 +33,209 @@
       -webkit-touch-callout: none;
     }
 
-    body {
-      background-color: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-      width: 100vw;
-      height: 100vh;
+    /* Verrouillage absolu dans la fenêtre visible Safari iPad (aucun défilement possible) */
+    html, body {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #000000;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", Roboto, sans-serif;
       overflow: hidden;
-      display: flex;
+    }
+
+    /* Alerte si l'iPad est tenu en mode Portrait au lieu de Paysage */
+    #portrait-warning {
+      position: fixed;
+      inset: 0;
+      background: #0b0711;
+      z-index: 9999;
+      display: none;
       flex-direction: column;
-    }
-
-    /* Barre supérieure compacte */
-    header {
-      height: 56px;
-      padding: 0 24px;
-      display: flex;
       align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid rgba(255, 117, 24, 0.2);
-      background: rgba(10, 8, 18, 0.95);
-      z-index: 10;
+      justify-content: center;
+      text-align: center;
+      padding: 30px;
+      gap: 20px;
     }
 
-    .brand {
-      font-size: 20px;
-      font-weight: 900;
-      letter-spacing: 2px;
-      color: var(--orange);
-      text-shadow: 0 0 15px rgba(255, 117, 24, 0.5);
-      display: flex;
-      align-items: center;
-      gap: 10px;
+    @media (orientation: portrait) {
+      #portrait-warning {
+        display: flex;
+      }
     }
 
-    .status-badge {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      padding: 6px 14px;
-      border-radius: 20px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #888;
-    }
-    .status-dot.online { background: var(--green); box-shadow: 0 0 8px var(--green); }
-    .status-dot.offline { background: var(--red); box-shadow: 0 0 8px var(--red); }
-
-    /* Disposition principale paysage : 2 colonnes fixes */
-    #main-layout {
-      flex: 1;
-      display: grid;
-      grid-template-columns: 1fr 340px;
-      gap: 24px;
-      padding: 20px 24px;
-      height: calc(100vh - 56px);
-      align-items: center;
-    }
-
-    /* Colonne Gauche : Caméra 4:3 paysage */
-    #camera-panel {
+    /* Conteneur principal Paysage occupant 100% de la zone visible */
+    #kiosk-wrapper {
+      position: fixed;
+      inset: 0;
+      width: 100%;
       height: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
-      position: relative;
-    }
-
-    .camera-frame-box {
-      height: 100%;
-      max-height: calc(100vh - 100px);
-      aspect-ratio: 4 / 3;
-      position: relative;
-      border-radius: 24px;
-      overflow: hidden;
-      border: 3px solid var(--orange);
-      box-shadow: 0 0 35px rgba(255, 117, 24, 0.35);
       background: #000;
     }
 
+    /* Cadre Paysage 4:3 (ratio natif capteur & écran iPad) */
+    #photobooth-stage {
+      position: relative;
+      aspect-ratio: 4 / 3;
+      width: min(100vw, calc(100dvh * 4 / 3));
+      height: min(100dvh, calc(100vw * 3 / 4));
+      max-width: 100%;
+      max-height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+
+    /* Flux vidéo plein cadre */
     #camera-video {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transform: scaleX(-1); /* Miroir par défaut */
-      display: block;
+      transform: scaleX(-1);
+      z-index: 1;
     }
 
+    /* Le cadre PNG unique superposé par-dessus la vidéo */
     #frame-overlay {
       position: absolute;
-      top: 0;
-      left: 0;
+      inset: 0;
       width: 100%;
       height: 100%;
-      pointer-events: none;
       object-fit: fill;
-      z-index: 2;
+      pointer-events: none;
+      z-index: 10;
     }
 
-    /* Colonne Droite : Contrôles & Déclencheur */
-    #sidebar-panel {
-      height: 100%;
-      max-height: calc(100vh - 100px);
-      background: var(--card-bg);
-      border: 1px solid rgba(255, 117, 24, 0.3);
-      border-radius: 24px;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      align-items: center;
-      backdrop-filter: blur(16px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    }
-
-    .sidebar-section-title {
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 1px;
-      color: rgba(255, 255, 255, 0.7);
-      text-transform: uppercase;
-      margin-bottom: 12px;
-      align-self: flex-start;
-    }
-
-    /* Sélecteur vertical de cadres miniatures */
-    #frames-list {
-      width: 100%;
-      display: flex;
-      gap: 12px;
-      overflow-x: auto;
-      padding-bottom: 6px;
-    }
-
-    .frame-pill {
-      flex: 0 0 80px;
-      height: 90px;
-      border-radius: 14px;
-      border: 2px solid rgba(255, 255, 255, 0.15);
-      background: rgba(0, 0, 0, 0.4);
-      padding: 6px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: space-between;
-      transition: all 0.2s ease;
-    }
-
-    .frame-pill.active {
-      border: 3px solid var(--orange);
-      box-shadow: 0 0 16px rgba(255, 117, 24, 0.7);
-      background: rgba(61, 20, 90, 0.6);
-      transform: translateY(-2px);
-    }
-
-    .frame-pill img {
-      width: 100%;
-      height: 56px;
-      object-fit: contain;
-    }
-
-    .frame-pill span {
-      font-size: 11px;
-      font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 70px;
-    }
-
-    /* Bouton Déclencheur Géant */
-    #shutter-container {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      margin: 10px 0;
-    }
-
+    /* BOUTON PHOTO INCLUS DANS LE CADRE (flottant en bas au centre) */
     #shutter-button {
-      width: 130px;
-      height: 130px;
+      position: absolute;
+      bottom: 8%;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 25;
+      width: 96px;
+      height: 96px;
       border-radius: 50%;
       background: linear-gradient(135deg, var(--orange), var(--orange-glow));
-      border: 6px solid #fff;
-      box-shadow: 0 0 35px rgba(255, 117, 24, 0.8), inset 0 0 15px rgba(255, 255, 255, 0.6);
+      border: 5px solid #ffffff;
+      box-shadow: 0 6px 28px rgba(0, 0, 0, 0.85), 0 0 25px rgba(255, 117, 24, 0.9);
       cursor: pointer;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
-      transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      transition: transform 0.12s ease, opacity 0.2s ease;
     }
 
     #shutter-button:active {
-      transform: scale(0.92);
-      box-shadow: 0 0 20px rgba(255, 117, 24, 1);
+      transform: translateX(-50%) scale(0.9);
     }
 
     #shutter-button svg {
       width: 44px;
       height: 44px;
-      fill: #0a0812;
+      fill: #000000;
     }
 
-    .shutter-label {
-      font-size: 16px;
-      font-weight: 900;
-      letter-spacing: 1.5px;
-      color: var(--orange);
-      text-transform: uppercase;
-    }
-
-    /* Décompte visuel plein écran */
+    /* Décompte 3, 2, 1 au centre du cadre */
     #countdown-layer {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.65);
-      backdrop-filter: blur(8px);
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
       display: none;
       align-items: center;
       justify-content: center;
-      z-index: 100;
+      z-index: 30;
     }
 
     #countdown-number {
-      font-size: 160px;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      background: rgba(31, 11, 46, 0.9);
+      border: 5px solid var(--orange);
+      box-shadow: 0 0 40px var(--orange);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 110px;
       font-weight: 900;
       color: var(--orange);
-      text-shadow: 0 0 60px var(--orange);
-      animation: pop 0.9s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite;
+      animation: popScale 0.85s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite;
     }
 
-    @keyframes pop {
-      0% { transform: scale(1.6); opacity: 0.5; }
+    @keyframes popScale {
+      0% { transform: scale(1.45); opacity: 0.6; }
       100% { transform: scale(1); opacity: 1; }
     }
 
     /* Flash blanc */
     #flash-layer {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: #fff;
+      inset: 0;
+      background: #ffffff;
       display: none;
-      z-index: 120;
+      z-index: 100;
     }
 
-    /* Écran Résultat Paysage : Photo à gauche, QR Code à droite */
+    /* Écran de résultat Paysage */
     #result-view {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: var(--bg);
+      inset: 0;
+      background: #0a0710;
       display: none;
-      grid-template-columns: 1fr 380px;
-      gap: 30px;
-      padding: 30px 40px;
+      grid-template-columns: 1fr 320px;
+      gap: 24px;
+      padding: 20px 28px;
       align-items: center;
-      z-index: 150;
+      z-index: 80;
     }
 
-    .result-photo-box {
+    .result-photo-wrap {
+      width: 100%;
       height: 100%;
-      max-height: calc(100vh - 60px);
       display: flex;
       align-items: center;
       justify-content: center;
+      overflow: hidden;
     }
 
     #result-img {
-      max-height: 100%;
       max-width: 100%;
+      max-height: 100%;
       aspect-ratio: 4 / 3;
-      border-radius: 20px;
+      border-radius: 16px;
       border: 3px solid var(--orange);
-      box-shadow: 0 0 35px rgba(255, 117, 24, 0.4);
+      box-shadow: 0 0 30px rgba(255, 117, 24, 0.4);
       object-fit: contain;
     }
 
-    .result-side-card {
-      background: var(--card-bg);
+    .result-sidebar {
+      background: #161122;
       border: 2px solid var(--orange);
-      border-radius: 24px;
-      padding: 24px;
+      border-radius: 20px;
+      padding: 20px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 16px;
+      gap: 14px;
       text-align: center;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
     }
 
-    .result-title {
-      font-size: 22px;
-      font-weight: 900;
-      color: var(--orange);
-      letter-spacing: 1px;
-    }
-
-    .qr-container {
-      background: #fff;
-      padding: 12px;
-      border-radius: 16px;
-      min-width: 170px;
-      min-height: 170px;
+    .qr-box {
+      background: #ffffff;
+      padding: 10px;
+      border-radius: 14px;
+      width: 160px;
+      height: 160px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -368,10 +244,9 @@
     .progress-track {
       width: 100%;
       height: 8px;
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.15);
       border-radius: 4px;
       overflow: hidden;
-      margin-top: 6px;
     }
 
     #progress-fill {
@@ -380,672 +255,263 @@
       background: var(--orange);
     }
 
-    .action-btn {
+    .btn-main {
       width: 100%;
-      padding: 14px;
-      border-radius: 14px;
-      background: var(--purple);
+      padding: 13px;
+      border-radius: 12px;
+      background: var(--purple-dark);
       border: 2px solid var(--orange);
-      color: #fff;
+      color: #ffffff;
       font-size: 16px;
       font-weight: 700;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
     }
 
-    /* Zone secrète admin (coin supérieur droit) */
-    #admin-touch {
+    /* Zone invisible Admin (coin supérieur droit : triple-clic OU appui long) */
+    #admin-hotspot {
       position: fixed;
       top: 0;
       right: 0;
-      width: 80px;
-      height: 56px;
-      z-index: 200;
+      width: 100px;
+      height: 100px;
+      z-index: 90;
     }
 
-    /* Modale Admin avec outil de test Drive */
+    /* Modale Admin */
     #admin-modal {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.85);
-      backdrop-filter: blur(10px);
+      inset: 0;
+      background: rgba(0, 0, 0, 0.88);
       display: none;
       align-items: center;
       justify-content: center;
-      z-index: 300;
+      z-index: 200;
+      padding: 20px;
     }
 
-    .admin-card {
-      background: #171424;
+    .admin-box {
+      background: #181326;
       border: 2px solid var(--orange);
       border-radius: 20px;
-      padding: 28px;
-      width: 90%;
-      max-width: 520px;
+      padding: 24px;
+      width: 100%;
+      max-width: 500px;
+      max-height: 90dvh;
+      overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 16px;
-      max-height: 90vh;
-      overflow-y: auto;
+      gap: 14px;
     }
 
-    .admin-card h2 {
+    .admin-box h2 {
       color: var(--orange);
       font-size: 20px;
     }
 
-    .form-group {
+    .field {
       display: flex;
       flex-direction: column;
       gap: 6px;
+      font-size: 13px;
+      color: #ccc;
     }
 
-    .form-group label {
-      font-size: 12px;
-      color: rgba(255, 255, 255, 0.7);
-      text-transform: uppercase;
-      font-weight: 600;
-    }
-
-    .form-group input, .form-group select {
-      background: #0a0812;
-      border: 1px solid rgba(255, 255, 255, 0.2);
+    .field input, .field select {
+      background: #09070e;
+      border: 1px solid rgba(255, 255, 255, 0.25);
       color: #fff;
-      padding: 12px;
-      border-radius: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
       font-size: 14px;
     }
 
-    .test-box {
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    #test-result-txt {
-      font-size: 12px;
-      color: #aaa;
-    }
-
-    .btn-file {
+    .upload-zone {
       border: 2px dashed var(--orange);
-      background: rgba(255, 117, 24, 0.1);
+      background: rgba(255, 117, 24, 0.12);
       color: var(--orange);
-      padding: 12px;
+      padding: 14px;
       border-radius: 10px;
       text-align: center;
+      font-weight: 800;
       cursor: pointer;
-      font-weight: bold;
-      font-size: 14px;
+    }
+
+    #drive-test-msg {
+      font-size: 12px;
+      padding: 8px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.4);
+      color: #aaa;
     }
   </style>
 </head>
 <body>
 
-  <!-- Barre supérieure -->
-  <header>
-    <div class="brand">
-      <span>🎃</span> HALLOWEEN PHOTOBOOTH
-    </div>
-    <div class="status-badge">
-      <div id="drive-dot" class="status-dot"></div>
-      <span id="drive-status-txt">Google Drive non testé</span>
-    </div>
-  </header>
-
-  <!-- Disposition principale : Caméra à gauche, Panneau à droite -->
-  <div id="main-layout">
-    
-    <div id="camera-panel">
-      <div class="camera-frame-box">
-        <video id="camera-video" autoplay playsinline muted></video>
-        <img id="frame-overlay" alt="Cadre en superposition">
-      </div>
-    </div>
-
-    <div id="sidebar-panel">
-      <div style="width: 100%;">
-        <div class="sidebar-section-title">Choisis ton cadre</div>
-        <div id="frames-list"></div>
-      </div>
-
-      <div id="shutter-container">
-        <div id="shutter-button" onclick="launchCountdown()">
-          <svg viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
-        </div>
-        <div class="shutter-label">Prendre la photo</div>
-      </div>
-
-      <div style="font-size: 11px; color: rgba(255,255,255,0.4); text-align: center;">
-        Appui 4s en haut à droite pour configurer
-      </div>
-    </div>
-
+  <!-- Message si la tablette est tenue verticalement -->
+  <div id="portrait-warning">
+    <div style="font-size: 64px;">🔄</div>
+    <h2 style="color: var(--orange); font-size: 26px;">TOURNE L'IPAD EN PAYSAGE</h2>
+    <p style="color: #aaa; font-size: 16px;">Le Photobooth est calibré pour le mode horizontal.</p>
   </div>
 
-  <!-- Décompte 3, 2, 1 -->
-  <div id="countdown-layer">
-    <div id="countdown-number">3</div>
+  <!-- Écran Kiosque Paysage : uniquement la caméra, le cadre unique et le bouton dedans -->
+  <div id="kiosk-wrapper">
+    <div id="photobooth-stage">
+      <video id="camera-video" autoplay playsinline muted></video>
+      <img id="frame-overlay" alt="Cadre Photobooth">
+
+      <!-- Bouton déclencheur directement inclus DANS le cadre -->
+      <div id="shutter-button" onclick="triggerCapture()">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/>
+          <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+        </svg>
+      </div>
+
+      <!-- Décompte 3, 2, 1 -->
+      <div id="countdown-layer">
+        <div id="countdown-number">3</div>
+      </div>
+    </div>
   </div>
 
   <!-- Flash blanc -->
   <div id="flash-layer"></div>
 
-  <!-- Écran Résultat Paysage (Photo à gauche + QR code à droite) -->
+  <!-- Écran Résultat Paysage -->
   <div id="result-view">
-    <div class="result-photo-box">
+    <div class="result-photo-wrap">
       <img id="result-img" alt="Photo finale">
     </div>
 
-    <div class="result-side-card">
-      <div class="result-title">SOUVENIR VALIDÉ !</div>
-      <p style="font-size: 13px; color: rgba(255,255,255,0.7);">Scanne avec ton smartphone pour récupérer ta photo :</p>
+    <div class="result-sidebar">
+      <h3 style="color: var(--orange); font-size: 20px; font-weight: 900;">TA PHOTO EST PRÊTE !</h3>
+      <p style="font-size: 12px; color: #ccc;">Scanne ce QR Code pour la récupérer :</p>
       
-      <div class="qr-container" id="qr-box">
-        <span id="qr-state" style="color: #000; font-size: 12px; font-weight: bold;">Envoi vers Drive...</span>
+      <div class="qr-box" id="qr-box">
+        <span style="color: #000; font-size: 12px; font-weight: bold;">Envoi Drive...</span>
       </div>
 
       <div style="width: 100%;">
-        <div id="return-txt" style="font-size: 12px; color: rgba(255,255,255,0.6); margin-bottom: 4px;">Retour dans 12s...</div>
+        <div id="return-txt" style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Retour dans 12s...</div>
         <div class="progress-track">
           <div id="progress-fill"></div>
         </div>
       </div>
 
-      <button class="action-btn" onclick="backToLive()">
-        <span>🔄</span> Reprendre
-      </button>
+      <button class="btn-main" onclick="closeResultView()">🔄 Reprendre la photo</button>
     </div>
   </div>
 
-  <!-- Zone invisible admin (4 secondes en haut à droite) -->
-  <div id="admin-touch"></div>
+  <!-- Zone secrète en haut à droite (appui long 3s OU 3 clics rapides) -->
+  <div id="admin-hotspot"></div>
 
-  <!-- Modale Configuration & Diagnostic Drive -->
+  <!-- Fenêtre d'administration -->
   <div id="admin-modal">
-    <div class="admin-card">
-      <h2>Réglages Photobooth</h2>
+    <div class="admin-box">
+      <h2>Réglages Administrateur</h2>
 
-      <div class="form-group">
-        <label>URL du Webhook Google Apps Script :</label>
+      <div class="field">
+        <label>Remplacer le cadre PNG (format Paysage 4:3 recommandé) :</label>
+        <div class="upload-zone" onclick="document.getElementById('png-input').click()">
+          📁 Importer mon cadre PNG (remplace l'actuel)
+        </div>
+        <input type="file" id="png-input" accept="image/png" style="display: none;" onchange="replaceSingleFrame(event)">
+      </div>
+
+      <div class="field">
+        <label>URL du Webhook Google Apps Script (Drive) :</label>
         <input type="text" id="cfg-url" placeholder="https://script.google.com/macros/s/.../exec">
       </div>
 
-      <!-- Module de test direct de la connexion Drive -->
-      <div class="test-box">
-        <button class="action-btn" style="padding: 10px; font-size: 13px;" onclick="testDriveConnection()">
-          🔍 Tester la liaison avec Google Drive
+      <div class="field">
+        <button class="btn-main" style="padding: 9px; font-size: 13px;" onclick="testGoogleDrive()">
+          🔍 Tester l'envoi vers Google Drive
         </button>
-        <div id="test-result-txt">Clique pour vérifier que le dossier et le script répondent bien.</div>
+        <div id="drive-test-msg">Aucun test effectué.</div>
       </div>
 
-      <div class="form-group">
-        <label>Décompte :</label>
-        <select id="cfg-time">
+      <div class="field">
+        <label>Temps du décompte :</label>
+        <select id="cfg-countdown">
           <option value="3">3 secondes</option>
           <option value="5">5 secondes</option>
           <option value="10">10 secondes</option>
         </select>
       </div>
 
-      <div class="form-group">
-        <label>Effet miroir (caméra avant) :</label>
+      <div class="field">
+        <label>Caméra & Miroir :</label>
         <select id="cfg-mirror">
-          <option value="true">Oui (recommandé)</option>
-          <option value="false">Non</option>
+          <option value="true">Caméra avant (effet miroir actif)</option>
+          <option value="false">Caméra avant (sans effet miroir)</option>
         </select>
       </div>
 
-      <div class="form-group">
-        <label>Importer un cadre PNG depuis l'iPad :</label>
-        <div class="btn-file" onclick="document.getElementById('file-picker').click()">
-          ➕ Ajouter un cadre PNG
-        </div>
-        <input type="file" id="file-picker" accept="image/png" style="display: none;" onchange="importCustomFrame(event)">
-      </div>
-
-      <div style="display: flex; gap: 10px; margin-top: 10px;">
-        <button class="action-btn" onclick="saveSettings()">Valider et fermer</button>
-      </div>
+      <button class="btn-main" style="background: var(--orange); color: #000;" onclick="saveAndCloseAdmin()">
+        Enregistrer et fermer
+      </button>
     </div>
   </div>
 
-  <!-- Canevas matriciel HD (invisible) -->
-  <canvas id="render-canvas" style="display: none;"></canvas>
+  <!-- Canvas invisible pour fusion HD 1600x1200 -->
+  <canvas id="merge-canvas" style="display: none;"></canvas>
 
   <script>
-    // Configuration persistée
-    let appConfig = {
+    // Paramètres généraux
+    let config = {
       webhookUrl: localStorage.getItem('pb_webhook') || '',
       countdown: parseInt(localStorage.getItem('pb_countdown') || '3'),
       mirror: localStorage.getItem('pb_mirror') !== 'false',
-      resultSec: 12
+      resultDuration: 12
     };
 
-    // Cadres par défaut au format paysage 4:3 (1600 x 1200)
-    const defaultFrames = [
-      { id: 'f_pumpkin', title: 'Citrouille', src: makeLandscapeFrame('#ff7518', 'HALLOWEEN 2026') },
-      { id: 'f_purple', title: 'Toile', src: makeLandscapeFrame('#8a2be2', 'MANOIR HANTÉ') },
-      { id: 'f_blood', title: 'Vampire', src: makeLandscapeFrame('#c0392b', 'NUIT DE L\'EFFROI') }
-    ];
+    let currentFrameDataUrl = null;
+    let videoStream = null;
+    let returnTimer = null;
 
-    let frames = [];
-    let activeFrameIdx = 0;
-    let stream = null;
-    let timerInterval = null;
-
-    window.addEventListener('DOMContentLoaded', async () => {
-      loadSavedFrames();
-      renderFrameSelector();
-      selectFrame(0);
-      await initCamera();
-      initAdminAccess();
-      if (appConfig.webhookUrl) {
-        checkDriveHealth();
-      }
-    });
-
-    // 1. Initialisation Caméra en ratio 4:3 paysage
-    async function initCamera() {
-      if (stream) stream.getTracks().forEach(t => t.stop());
-      
-      const constraints = {
-        audio: false,
-        video: {
-          facingMode: 'user',
-          width: { ideal: 1920 },
-          height: { ideal: 1440 },
-          aspectRatio: { ideal: 4 / 3 }
-        }
-      };
-
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-        const v = document.getElementById('camera-video');
-        v.srcObject = stream;
-        v.style.transform = appConfig.mirror ? 'scaleX(-1)' : 'scaleX(1)';
-      } catch (e) {
-        alert("Impossible d'accéder à la caméra : " + e.message);
-      }
-    }
-
-    // 2. Gestion des Cadres
-    function loadSavedFrames() {
-      const stored = localStorage.getItem('pb_custom_frames');
-      if (stored) {
-        try {
-          frames = JSON.parse(stored);
-        } catch (_) {
-          frames = [...defaultFrames];
-        }
-      } else {
-        frames = [...defaultFrames];
-      }
-    }
-
-    function renderFrameSelector() {
-      const list = document.getElementById('frames-list');
-      list.innerHTML = '';
-      frames.forEach((f, i) => {
-        const item = document.createElement('div');
-        item.className = 'frame-pill' + (i === activeFrameIdx ? ' active' : '');
-        item.onclick = () => selectFrame(i);
-
-        const img = document.createElement('img');
-        img.src = f.src;
-
-        const label = document.createElement('span');
-        label.textContent = f.title;
-
-        item.appendChild(img);
-        item.appendChild(label);
-        list.appendChild(item);
-      });
-    }
-
-    function selectFrame(i) {
-      activeFrameIdx = i;
-      document.getElementById('frame-overlay').src = frames[i].src;
-      document.querySelectorAll('.frame-pill').forEach((el, idx) => {
-        el.classList.toggle('active', idx === i);
-      });
-    }
-
-    function importCustomFrame(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const newF = {
-          id: 'custom_' + Date.now(),
-          title: file.name.replace('.png', '').substring(0, 10),
-          src: event.target.result
+    // 1. Base de données locale IndexedDB pour sauvegarder un PNG lourd sans limite de taille sur iPad
+    function openFrameDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open('PhotoboothDB', 1);
+        req.onupgradeneeded = (e) => {
+          e.target.result.createObjectStore('frames');
         };
-        frames.push(newF);
-        try {
-          localStorage.setItem('pb_custom_frames', JSON.stringify(frames));
-        } catch (_) {}
-        renderFrameSelector();
-        selectFrame(frames.length - 1);
-        alert('Cadre "' + file.name + '" importé et activé !');
-      };
-      reader.readAsDataURL(file);
-    }
-
-    // 3. Audio temps réel (sans fichiers externes)
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function playBeep() {
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.12);
-    }
-
-    function playShutter() {
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.15, audioCtx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.5;
-      const noise = audioCtx.createBufferSource();
-      noise.buffer = buffer;
-      noise.connect(audioCtx.destination);
-      noise.start();
-    }
-
-    // 4. Décompte & Capture HD
-    async function launchCountdown() {
-      const shutter = document.getElementById('shutter-button');
-      shutter.style.pointerEvents = 'none';
-
-      const layer = document.getElementById('countdown-layer');
-      const num = document.getElementById('countdown-number');
-      layer.style.display = 'flex';
-
-      for (let i = appConfig.countdown; i >= 1; i--) {
-        num.textContent = i;
-        playBeep();
-        await new Promise(r => setTimeout(r, 1000));
-      }
-
-      layer.style.display = 'none';
-
-      // Flash blanc
-      const flash = document.getElementById('flash-layer');
-      flash.style.display = 'block';
-      playShutter();
-      await new Promise(r => setTimeout(r, 150));
-      flash.style.display = 'none';
-
-      await generateMergedPhoto();
-      shutter.style.pointerEvents = 'auto';
-    }
-
-    // 5. Fusion matricielle Canvas Paysage (1600 x 1200)
-    async function generateMergedPhoto() {
-      const video = document.getElementById('camera-video');
-      const canvas = document.getElementById('render-canvas');
-      const ctx = canvas.getContext('2d');
-
-      const W = 1600;
-      const H = 1200;
-      canvas.width = W;
-      canvas.height = H;
-
-      const vW = video.videoWidth;
-      const vH = video.videoHeight;
-      const targetRatio = 4 / 3;
-      const vRatio = vW / vH;
-
-      let cropW = vW, cropH = vH, cX = 0, cY = 0;
-      if (vRatio > targetRatio) {
-        cropW = vH * targetRatio;
-        cX = (vW - cropW) / 2;
-      } else {
-        cropH = vW / targetRatio;
-        cY = (vH - cropH) / 2;
-      }
-
-      ctx.save();
-      if (appConfig.mirror) {
-        ctx.translate(W, 0);
-        ctx.scale(-1, 1);
-      }
-      ctx.drawImage(video, cX, cY, cropW, cropH, 0, 0, W, H);
-      ctx.restore();
-
-      // Dessin du cadre PNG par-dessus
-      const fImg = new Image();
-      await new Promise(res => {
-        fImg.onload = res;
-        fImg.src = frames[activeFrameIdx].src;
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = (e) => reject(e);
       });
-      ctx.drawImage(fImg, 0, 0, W, H);
-
-      const finalJpg = canvas.toDataURL('image/jpeg', 0.95);
-      showResult(finalJpg);
-      sendToDrive(finalJpg);
     }
 
-    // 6. Affichage Résultat & Envoi Cloud
-    function showResult(jpgUrl) {
-      document.getElementById('result-img').src = jpgUrl;
-      document.getElementById('result-view').style.display = 'grid';
-
-      const qrBox = document.getElementById('qr-box');
-      qrBox.innerHTML = '<span style="color:#000;font-size:12px;font-weight:bold;">Envoi vers Drive...</span>';
-
-      let left = appConfig.resultSec;
-      const fill = document.getElementById('progress-fill');
-      const txt = document.getElementById('return-txt');
-
-      clearInterval(timerInterval);
-      timerInterval = setInterval(() => {
-        left -= 0.1;
-        fill.style.width = Math.max(0, (left / appConfig.resultSec) * 100) + '%';
-        txt.textContent = `Retour automatique dans ${Math.ceil(left)}s...`;
-        if (left <= 0) {
-          clearInterval(timerInterval);
-          backToLive();
-        }
-      }, 100);
-    }
-
-    function backToLive() {
-      clearInterval(timerInterval);
-      document.getElementById('result-view').style.display = 'none';
-    }
-
-    async function sendToDrive(base64Image) {
-      if (!appConfig.webhookUrl) {
-        document.getElementById('qr-box').innerHTML = '<span style="color:#000;font-size:11px;">Drive non configuré</span>';
-        return;
-      }
-
-      const payload = JSON.stringify({
-        image: base64Image,
-        filename: `halloween_${Date.now()}.jpg`
+    async function saveFrameToDB(dataUrl) {
+      const db = await openFrameDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('frames', 'readwrite');
+        tx.objectStore('frames').put(dataUrl, 'single_active_frame');
+        tx.oncomplete = () => resolve();
+        tx.onerror = (e) => reject(e);
       });
-
-      try {
-        const res = await fetch(appConfig.webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: payload
-        });
-        const data = await res.json();
-        if (data.status === 'success' && data.url) {
-          const qrBox = document.getElementById('qr-box');
-          qrBox.innerHTML = '';
-          new QRCode(qrBox, {
-            text: data.url,
-            width: 150,
-            height: 150,
-            colorDark: "#000000",
-            colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.M
-          });
-          updateDriveBadge(true);
-        } else {
-          throw new Error('Réponse inattendue');
-        }
-      } catch (err) {
-        document.getElementById('qr-box').innerHTML = '<span style="color:#c0392b;font-size:11px;font-weight:bold;">Échec envoi Drive</span>';
-        updateDriveBadge(false);
-      }
     }
 
-    // 7. Outil de diagnostic Drive
-    async function testDriveConnection() {
-      const url = document.getElementById('cfg-url').value.trim();
-      const txt = document.getElementById('test-result-txt');
-      if (!url) {
-        txt.style.color = '#e74c3c';
-        txt.textContent = "Colle d'abord l'URL du webhook ci-dessus.";
-        return;
-      }
-
-      txt.style.color = '#ff7518';
-      txt.textContent = 'Test en cours avec Google Apps Script...';
-
+    async function loadFrameFromDB() {
       try {
-        // Envoi d'un micro-pixel blanc pour tester la création réelle d'un fichier dans le dossier
-        const dummyPixel = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ image: dummyPixel, filename: 'test_connexion.jpg' })
+        const db = await openFrameDB();
+        return new Promise((resolve) => {
+          const tx = db.transaction('frames', 'readonly');
+          const req = tx.objectStore('frames').get('single_active_frame');
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => resolve(null);
         });
-        const data = await res.json();
-
-        if (data.status === 'success') {
-          txt.style.color = '#2ecc71';
-          txt.textContent = 'Succès ! Le fichier test a été créé dans ton dossier Google Drive.';
-          updateDriveBadge(true);
-        } else {
-          txt.style.color = '#e74c3c';
-          txt.textContent = 'Erreur script : ' + (data.message || 'problème FOLDER_ID');
-          updateDriveBadge(false);
-        }
-      } catch (e) {
-        txt.style.color = '#e74c3c';
-        txt.textContent = 'Échec de connexion. Vérifie que "Qui a accès" est bien réglé sur "Tout le monde" dans le script.';
-        updateDriveBadge(false);
-      }
-    }
-
-    async function checkDriveHealth() {
-      try {
-        const res = await fetch(appConfig.webhookUrl);
-        const data = await res.json();
-        updateDriveBadge(data.status === 'online');
       } catch (_) {
-        updateDriveBadge(false);
+        return null;
       }
     }
 
-    function updateDriveBadge(online) {
-      const dot = document.getElementById('drive-dot');
-      const txt = document.getElementById('drive-status-txt');
-      if (online) {
-        dot.className = 'status-dot online';
-        txt.textContent = 'Google Drive connecté';
+    // Initialisation au démarrage
+    window.addEventListener('DOMContentLoaded', async () => {
+      const savedFrame = await loadFrameFromDB();
+      if (savedFrame) {
+        currentFrameDataUrl = savedFrame;
       } else {
-        dot.className = 'status-dot offline';
-        txt.textContent = 'Google Drive déconnecté';
+        currentFrameDataUrl = createDefaultLandscapeFrame();
       }
-    }
-
-    // 8. Accès Admin
-    let holdTimer = null;
-    function initAdminAccess() {
-      const el = document.getElementById('admin-touch');
-      const start = () => {
-        holdTimer = setTimeout(() => {
-          const pin = prompt('Code PIN administrateur (défaut : 1031) :');
-          if (pin === '1031') openAdmin();
-          else if (pin) alert('Code PIN incorrect.');
-        }, 4000);
-      };
-      const stop = () => clearTimeout(holdTimer);
-
-      el.addEventListener('touchstart', start);
-      el.addEventListener('touchend', stop);
-      el.addEventListener('mousedown', start);
-      el.addEventListener('mouseup', stop);
-    }
-
-    function openAdmin() {
-      document.getElementById('cfg-url').value = appConfig.webhookUrl;
-      document.getElementById('cfg-time').value = appConfig.countdown;
-      document.getElementById('cfg-mirror').value = appConfig.mirror.toString();
-      document.getElementById('admin-modal').style.display = 'flex';
-    }
-
-    function saveSettings() {
-      appConfig.webhookUrl = document.getElementById('cfg-url').value.trim();
-      appConfig.countdown = parseInt(document.getElementById('cfg-time').value);
-      appConfig.mirror = document.getElementById('cfg-mirror').value === 'true';
-
-      localStorage.setItem('pb_webhook', appConfig.webhookUrl);
-      localStorage.setItem('pb_countdown', appConfig.countdown);
-      localStorage.setItem('pb_mirror', appConfig.mirror);
-
-      document.getElementById('admin-modal').style.display = 'none';
-      initCamera();
-      if (appConfig.webhookUrl) checkDriveHealth();
-    }
-
-    // 9. Générateur de cadre de secours en paysage 4:3 (1600 x 1200)
-    function makeLandscapeFrame(color, text) {
-      const c = document.createElement('canvas');
-      c.width = 1600;
-      c.height = 1200;
-      const ctx = c.getContext('2d');
-
-      // Bordure
-      ctx.lineWidth = 40;
-      ctx.strokeStyle = color;
-      ctx.strokeRect(20, 20, 1600 - 40, 1200 - 40);
-
-      // Bandeau bas
-      ctx.fillStyle = color;
-      ctx.fillRect(0, 1200 - 110, 1600, 110);
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = '900 42px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(text, 800, 1200 - 40);
-
-      // Toiles d'araignées dans les coins
-      ctx.lineWidth = 5;
-      [60, 120, 180].forEach(r => {
-        ctx.beginPath();
-        ctx.arc(40, 40, r, 0, Math.PI / 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(1600 - 40, 40, r, Math.PI / 2, Math.PI);
-        ctx.stroke();
-      });
-
-      return c.toDataURL('image/png');
-    }
-  </script>
-</body>
-</html>
+      document.
