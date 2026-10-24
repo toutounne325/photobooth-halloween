@@ -1,0 +1,923 @@
+<!--
+  Protection légale pour le trading, propriété exclusive de Pirate Pips ™.
+  AVERTISSEMENT LÉGAL (DISCLAIMER) : Le trading d'instruments financiers comporte un niveau de risque élevé et peut ne pas convenir à tous les investisseurs. Les performances passées ne préjugent pas des performances futures. Ce logiciel est fourni à titre informatif et technologique uniquement, sans aucune garantie de gain financier.
+-->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Halloween Photobooth Kiosk</title>
+  
+  <!-- Métadonnées PWA pour affichage plein écran Kiosque sur iPadOS / iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Photobooth">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0B0A0E">
+
+  <!-- Librairie légère de génération de QR Code -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <style>
+    :root {
+      --bg-black: #0B0A0E;
+      --surface-dark: #17141F;
+      --pumpkin-orange: #FF7518;
+      --pumpkin-glow: #FF9A44;
+      --dark-purple: #2B113F;
+      --mystic-violet: #5A228B;
+      --text-light: #F6F2FA;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-black);
+      color: var(--text-light);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* En-tête */
+    header {
+      padding: 10px 16px;
+      text-align: center;
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: var(--pumpkin-orange);
+      text-shadow: 0 0 12px rgba(255, 117, 24, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      z-index: 10;
+    }
+
+    /* Zone Kiosque centrale au ratio 3:4 */
+    #stage-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 16px;
+      position: relative;
+    }
+
+    .kiosk-aspect-box {
+      width: 100%;
+      height: 100%;
+      max-width: calc(75vh);
+      max-height: calc(133.33vw);
+      aspect-ratio: 3 / 4;
+      position: relative;
+      border-radius: 20px;
+      overflow: hidden;
+      border: 3px solid var(--pumpkin-orange);
+      box-shadow: 0 0 25px rgba(90, 34, 139, 0.45);
+      background-color: var(--surface-dark);
+    }
+
+    #camera-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* Effet miroir actif par défaut */
+      display: block;
+    }
+
+    #frame-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      object-fit: fill;
+      z-index: 2;
+    }
+
+    /* Sélecteur de cadres miniatures en bas */
+    #frames-tray {
+      height: 94px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 0 20px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .frame-thumb {
+      flex: 0 0 68px;
+      height: 80px;
+      border-radius: 12px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      background-color: var(--dark-purple);
+      padding: 4px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.2s ease;
+    }
+
+    .frame-thumb.selected {
+      border: 3px solid var(--pumpkin-orange);
+      box-shadow: 0 0 12px var(--pumpkin-orange);
+      transform: scale(1.05);
+    }
+
+    .frame-thumb img {
+      width: 100%;
+      height: 56px;
+      object-fit: contain;
+    }
+
+    .frame-thumb span {
+      font-size: 9px;
+      color: rgba(255, 255, 255, 0.8);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 60px;
+    }
+
+    /* Bouton d'obturation */
+    #controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 12px 0 24px 0;
+    }
+
+    #shutter-btn {
+      width: 86px;
+      height: 86px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--pumpkin-orange), var(--pumpkin-glow));
+      border: 4px solid #fff;
+      box-shadow: 0 0 24px rgba(255, 117, 24, 0.7);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s ease;
+    }
+
+    #shutter-btn:active {
+      transform: scale(0.92);
+    }
+
+    #shutter-btn svg {
+      width: 40px;
+      height: 40px;
+      fill: var(--bg-black);
+    }
+
+    /* Décompte animé 3, 2, 1 */
+    #countdown-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+    }
+
+    #countdown-circle {
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      background: rgba(43, 17, 63, 0.9);
+      border: 5px solid var(--pumpkin-orange);
+      box-shadow: 0 0 35px var(--pumpkin-orange);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 100px;
+      font-weight: 900;
+      color: var(--pumpkin-orange);
+      animation: popScale 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite;
+    }
+
+    @keyframes popScale {
+      0% { transform: scale(1.4); opacity: 0.6; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Flash blanc */
+    #white-flash {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #fff;
+      display: none;
+      z-index: 50;
+    }
+
+    /* Écran de Résultat & QR Code */
+    #result-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: var(--bg-black);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px;
+      z-index: 30;
+    }
+
+    .result-content {
+      flex: 1;
+      width: 100%;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 30px;
+      max-width: 1000px;
+    }
+
+    #final-photo-img {
+      max-height: 65vh;
+      aspect-ratio: 3 / 4;
+      border-radius: 18px;
+      border: 3px solid var(--pumpkin-orange);
+      box-shadow: 0 0 25px rgba(255, 117, 24, 0.4);
+      object-fit: contain;
+    }
+
+    .qr-card {
+      background: var(--surface-dark);
+      padding: 20px;
+      border-radius: 20px;
+      border: 2px solid var(--pumpkin-orange);
+      box-shadow: 0 0 20px rgba(255, 117, 24, 0.25);
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      width: 240px;
+    }
+
+    .qr-card h3 {
+      font-size: 17px;
+      font-weight: 900;
+      color: var(--pumpkin-orange);
+      letter-spacing: 1px;
+    }
+
+    .qr-box {
+      background: #fff;
+      padding: 10px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 160px;
+      min-height: 160px;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      max-width: 500px;
+      background: var(--dark-purple);
+      border-radius: 10px;
+      height: 10px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+
+    #progress-bar {
+      width: 100%;
+      height: 100%;
+      background: var(--pumpkin-orange);
+      transition: width 0.1s linear;
+    }
+
+    .btn-action {
+      background: var(--dark-purple);
+      color: #fff;
+      border: 2px solid var(--pumpkin-orange);
+      border-radius: 14px;
+      padding: 14px 28px;
+      font-size: 17px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    /* Zone secrète d'administration (coin haut droit 4 secondes) */
+    #admin-secret-zone {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 90px;
+      height: 90px;
+      z-index: 100;
+    }
+
+    /* Modale Admin */
+    #admin-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 110;
+    }
+
+    .modal-box {
+      background: var(--surface-dark);
+      border: 2px solid var(--pumpkin-orange);
+      border-radius: 20px;
+      padding: 24px;
+      width: 90%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .modal-box h2 {
+      color: var(--pumpkin-orange);
+      font-size: 20px;
+    }
+
+    .modal-box label {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.8);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .modal-box input[type="text"],
+    .modal-box select {
+      background: var(--bg-black);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 15px;
+    }
+
+    .custom-file-upload {
+      background: var(--dark-purple);
+      border: 1px dashed var(--pumpkin-orange);
+      padding: 12px;
+      border-radius: 10px;
+      text-align: center;
+      cursor: pointer;
+      color: var(--pumpkin-orange);
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <span>🎃</span> HALLOWEEN PHOTOBOOTH
+  </header>
+
+  <!-- Zone Kiosque Live Preview avec superposition du cadre -->
+  <div id="stage-container">
+    <div class="kiosk-aspect-box">
+      <video id="camera-video" autoplay playsinline muted></video>
+      <img id="frame-overlay" alt="Cadre Halloween">
+    </div>
+  </div>
+
+  <!-- Sélecteur horizontal de cadres miniatures -->
+  <div id="frames-tray"></div>
+
+  <!-- Bouton d'obturation -->
+  <div id="controls">
+    <div id="shutter-btn" onclick="startCountdownWorkflow()">
+      <svg viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+    </div>
+  </div>
+
+  <!-- Décompte (3, 2, 1) -->
+  <div id="countdown-overlay">
+    <div id="countdown-circle">3</div>
+  </div>
+
+  <!-- Flash blanc -->
+  <div id="white-flash"></div>
+
+  <!-- Écran de Résultat & QR Code -->
+  <div id="result-screen">
+    <h2 style="color: var(--pumpkin-orange); letter-spacing: 2px;">MAGNIFIQUE HORREUR !</h2>
+    
+    <div class="result-content">
+      <img id="final-photo-img" alt="Photo finale">
+      <div class="qr-card">
+        <h3>SCANNE TA PHOTO</h3>
+        <p style="font-size: 12px; color: rgba(255,255,255,0.7);">Télécharge ton souvenir sur ton smartphone</p>
+        <div class="qr-box" id="qrcode-container">
+          <span id="qr-loading" style="color: #000; font-size: 12px; font-weight: bold;">Envoi Cloud...</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+      <p id="return-timer-txt" style="font-size: 13px; color: rgba(255,255,255,0.7);">Retour automatique dans 12s...</p>
+      <div class="progress-bar-container">
+        <div id="progress-bar"></div>
+      </div>
+      <button class="btn-action" onclick="resetToLiveView()">Reprendre</button>
+    </div>
+  </div>
+
+  <!-- Zone secrète d'appui long pour administration (4 secondes) -->
+  <div id="admin-secret-zone"></div>
+
+  <!-- Modale Admin -->
+  <div id="admin-modal">
+    <div class="modal-box">
+      <h2>Configuration Administrateur</h2>
+      
+      <label>
+        URL du Webhook Google Apps Script (Drive) :
+        <input type="text" id="cfg-webhook" placeholder="https://script.google.com/macros/s/.../exec">
+      </label>
+
+      <label>
+        Décompte avant capture :
+        <select id="cfg-countdown">
+          <option value="3">3 secondes</option>
+          <option value="5">5 secondes</option>
+          <option value="10">10 secondes</option>
+        </select>
+      </label>
+
+      <label>
+        Caméra :
+        <select id="cfg-facing">
+          <option value="user">Frontale (Selfie)</option>
+          <option value="environment">Arrière</option>
+        </select>
+      </label>
+
+      <label>
+        Effet miroir :
+        <select id="cfg-mirror">
+          <option value="true">Activé</option>
+          <option value="false">Désactivé</option>
+        </select>
+      </label>
+
+      <label>
+        Importer un cadre PNG depuis l'iPad :
+        <div class="custom-file-upload" onclick="document.getElementById('frame-file-input').click()">
+          ➕ Choisir un fichier PNG transparent
+        </div>
+        <input type="file" id="frame-file-input" accept="image/png" style="display: none;" onchange="handleFrameUpload(event)">
+      </label>
+
+      <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px;">
+        <button class="btn-action" style="padding: 10px 16px;" onclick="closeAdminModal()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Canvas invisible de traitement graphique haute définition -->
+  <canvas id="merge-canvas" style="display: none;"></canvas>
+
+  <script>
+    // Configuration persistée
+    let config = {
+      webhookUrl: localStorage.getItem('cfg_webhook') || '',
+      countdownSeconds: parseInt(localStorage.getItem('cfg_countdown') || '3'),
+      facingMode: localStorage.getItem('cfg_facing') || 'user',
+      isMirrored: localStorage.getItem('cfg_mirror') !== 'false',
+      resultSeconds: 12
+    };
+
+    // Cadres par défaut générés en mémoire au ratio 3:4 (900x1200) avec transparence
+    const defaultFrames = [
+      { id: 'frame_citrouille', title: 'Citrouille', dataUrl: generateBuiltInFrame('orange') },
+      { id: 'frame_toile', title: 'Toile', dataUrl: generateBuiltInFrame('purple') },
+      { id: 'frame_vampire', title: 'Vampire', dataUrl: generateBuiltInFrame('red') }
+    ];
+
+    let framesList = [];
+    let selectedFrameIndex = 0;
+    let cameraStream = null;
+    let resultInterval = null;
+
+    // Initialisation
+    window.addEventListener('DOMContentLoaded', async () => {
+      loadFrames();
+      renderFramesTray();
+      applyFrame(0);
+      await startCamera();
+      setupAdminSecretZone();
+    });
+
+    // 1. Gestion de la Caméra (iOS Safari compatible)
+    async function startCamera() {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+
+      const constraints = {
+        audio: false,
+        video: {
+          facingMode: config.facingMode,
+          width: { ideal: 1920 },
+          height: { ideal: 1440 },
+          aspectRatio: { ideal: 4 / 3 }
+        }
+      };
+
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        const video = document.getElementById('camera-video');
+        video.srcObject = cameraStream;
+        video.style.transform = config.isMirrored ? 'scaleX(-1)' : 'scaleX(1)';
+      } catch (err) {
+        alert("Erreur d'accès à la caméra : " + err.message);
+      }
+    }
+
+    // 2. Gestion des Cadres PNG et Stockage Local
+    function loadFrames() {
+      const stored = localStorage.getItem('custom_frames');
+      if (stored) {
+        try {
+          framesList = JSON.parse(stored);
+        } catch (_) {
+          framesList = [...defaultFrames];
+        }
+      } else {
+        framesList = [...defaultFrames];
+      }
+    }
+
+    function renderFramesTray() {
+      const tray = document.getElementById('frames-tray');
+      tray.innerHTML = '';
+      framesList.forEach((frame, idx) => {
+        const thumb = document.createElement('div');
+        thumb.className = 'frame-thumb' + (idx === selectedFrameIndex ? ' selected' : '');
+        thumb.onclick = () => applyFrame(idx);
+
+        const img = document.createElement('img');
+        img.src = frame.dataUrl;
+
+        const span = document.createElement('span');
+        span.textContent = frame.title;
+
+        thumb.appendChild(img);
+        thumb.appendChild(span);
+        tray.appendChild(thumb);
+      });
+    }
+
+    function applyFrame(idx) {
+      selectedFrameIndex = idx;
+      document.getElementById('frame-overlay').src = framesList[idx].dataUrl;
+      const thumbs = document.querySelectorAll('.frame-thumb');
+      thumbs.forEach((t, i) => t.classList.toggle('selected', i === idx));
+    }
+
+    function handleFrameUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const newFrame = {
+          id: 'custom_' + Date.now(),
+          title: file.name.replace('.png', '').substring(0, 10),
+          dataUrl: e.target.result
+        };
+        framesList.push(newFrame);
+        try {
+          localStorage.setItem('custom_frames', JSON.stringify(framesList));
+        } catch (_) {
+          alert('Stockage local saturé. Le cadre restera actif pour cette session.');
+        }
+        renderFramesTray();
+        applyFrame(framesList.length - 1);
+        alert('Cadre "' + file.name + '" importé avec succès !');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // 3. Synthèse Audio en direct (Web Audio API)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playBeep() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.12);
+    }
+
+    function playShutter() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const bufferSize = audioCtx.sampleRate * 0.15;
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
+      }
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buffer;
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.6, audioCtx.currentTime);
+      noise.connect(gain);
+      gain.connect(audioCtx.destination);
+      noise.start();
+    }
+
+    // 4. Décompte & Capture HD
+    async function startCountdownWorkflow() {
+      document.getElementById('shutter-btn').style.pointerEvents = 'none';
+      const overlay = document.getElementById('countdown-overlay');
+      const circle = document.getElementById('countdown-circle');
+      overlay.style.display = 'flex';
+
+      for (let i = config.countdownSeconds; i >= 1; i--) {
+        circle.textContent = i;
+        playBeep();
+        await new Promise(r => setTimeout(r, 1000));
+      }
+
+      overlay.style.display = 'none';
+
+      // Simulation du flash blanc 150ms
+      const flash = document.getElementById('white-flash');
+      flash.style.display = 'block';
+      playShutter();
+      await new Promise(r => setTimeout(r, 150));
+      flash.style.display = 'none';
+
+      // Fusion matricielle sur canvas haute définition
+      await captureAndMergePhoto();
+      document.getElementById('shutter-btn').style.pointerEvents = 'auto';
+    }
+
+    // 5. Moteur de Fusion Matricielle Canvas (Ratio 3:4 natif)
+    async function captureAndMergePhoto() {
+      const video = document.getElementById('camera-video');
+      const canvas = document.getElementById('merge-canvas');
+      const ctx = canvas.getContext('2d');
+
+      // Résolution de sortie HD 3:4 (1200 x 1600 px)
+      const outWidth = 1200;
+      const outHeight = 1600;
+      canvas.width = outWidth;
+      canvas.height = outHeight;
+
+      const vW = video.videoWidth;
+      const vH = video.videoHeight;
+      const targetRatio = outWidth / outHeight; // 3/4 = 0.75
+      const videoRatio = vW / vH;
+
+      let cropW = vW;
+      let cropH = vH;
+      let cropX = 0;
+      let cropY = 0;
+
+      if (videoRatio > targetRatio) {
+        cropW = vH * targetRatio;
+        cropX = (vW - cropW) / 2;
+      } else {
+        cropH = vW / targetRatio;
+        cropY = (vH - cropH) / 2;
+      }
+
+      ctx.save();
+      if (config.isMirrored) {
+        ctx.translate(outWidth, 0);
+        ctx.scale(-1, 1);
+      }
+
+      // Dessin de la vidéo avec center-crop
+      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, outWidth, outHeight);
+      ctx.restore();
+
+      // Dessin du cadre PNG par-dessus
+      const frameImg = new Image();
+      frameImg.crossOrigin = 'anonymous';
+      await new Promise((resolve) => {
+        frameImg.onload = resolve;
+        frameImg.src = framesList[selectedFrameIndex].dataUrl;
+      });
+
+      ctx.drawImage(frameImg, 0, 0, outWidth, outHeight);
+
+      // Export JPEG qualité 95 %
+      const finalJpegDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      showResultScreen(finalJpegDataUrl);
+
+      // Envoi asynchrone vers Google Drive via Webhook
+      uploadToDrive(finalJpegDataUrl);
+    }
+
+    // 6. Affichage du Résultat et Synchronisation Cloud
+    function showResultScreen(jpegUrl) {
+      document.getElementById('final-photo-img').src = jpegUrl;
+      const resultScreen = document.getElementById('result-screen');
+      resultScreen.style.display = 'flex';
+
+      const qrContainer = document.getElementById('qrcode-container');
+      qrContainer.innerHTML = '<span id="qr-loading" style="color: #000; font-size: 12px; font-weight: bold;">Envoi Cloud...</span>';
+
+      // Décompte de retour automatique
+      let timeLeft = config.resultSeconds;
+      const progressBar = document.getElementById('progress-bar');
+      const timerTxt = document.getElementById('return-timer-txt');
+
+      clearInterval(resultInterval);
+      resultInterval = setInterval(() => {
+        timeLeft -= 0.1;
+        const pct = Math.max(0, (timeLeft / config.resultSeconds) * 100);
+        progressBar.style.width = pct + '%';
+        timerTxt.textContent = `Retour automatique dans ${Math.ceil(timeLeft)}s...`;
+
+        if (timeLeft <= 0) {
+          clearInterval(resultInterval);
+          resetToLiveView();
+        }
+      }, 100);
+    }
+
+    function resetToLiveView() {
+      clearInterval(resultInterval);
+      document.getElementById('result-screen').style.display = 'none';
+    }
+
+    async function uploadToDrive(base64Jpeg) {
+      if (!config.webhookUrl) {
+        const qrContainer = document.getElementById('qrcode-container');
+        qrContainer.innerHTML = '<span style="color:#000;font-size:11px;">Enregistré localement (aucun webhook configuré)</span>';
+        return;
+      }
+
+      const fileName = `halloween_${Date.now()}.jpg`;
+      const payload = JSON.stringify({ image: base64Jpeg, filename: fileName });
+
+      try {
+        // Envoi avec Content-Type text/plain pour éviter les pré-requêtes OPTIONS bloquantes (CORS)
+        const response = await fetch(config.webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: payload
+        });
+
+        const data = await response.json();
+        if (data.status === 'success' && data.url) {
+          displayQrCode(data.url);
+        } else {
+          throw new Error('Réponse inattendue');
+        }
+      } catch (e) {
+        console.warn('Erreur envoi webhook :', e);
+        const qrContainer = document.getElementById('qrcode-container');
+        qrContainer.innerHTML = '<span style="color:#000;font-size:11px;">Photo sauvegardée ! Réseau faible.</span>';
+      }
+    }
+
+    function displayQrCode(url) {
+      const qrContainer = document.getElementById('qrcode-container');
+      qrContainer.innerHTML = '';
+      new QRCode(qrContainer, {
+        text: url,
+        width: 140,
+        height: 140,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    }
+
+    // 7. Zone secrète & Menu Administrateur
+    let adminTimer = null;
+    function setupAdminSecretZone() {
+      const zone = document.getElementById('admin-secret-zone');
+      const startHold = () => {
+        adminTimer = setTimeout(() => {
+          const pin = prompt('Code PIN administrateur (défaut : 1031) :');
+          if (pin === '1031') {
+            openAdminModal();
+          } else if (pin !== null) {
+            alert('Code PIN incorrect.');
+          }
+        }, 4000);
+      };
+      const cancelHold = () => clearTimeout(adminTimer);
+
+      zone.addEventListener('touchstart', startHold);
+      zone.addEventListener('touchend', cancelHold);
+      zone.addEventListener('mousedown', startHold);
+      zone.addEventListener('mouseup', cancelHold);
+    }
+
+    function openAdminModal() {
+      document.getElementById('cfg-webhook').value = config.webhookUrl;
+      document.getElementById('cfg-countdown').value = config.countdownSeconds;
+      document.getElementById('cfg-facing').value = config.facingMode;
+      document.getElementById('cfg-mirror').value = config.isMirrored.toString();
+      document.getElementById('admin-modal').style.display = 'flex';
+    }
+
+    function closeAdminModal() {
+      config.webhookUrl = document.getElementById('cfg-webhook').value.trim();
+      config.countdownSeconds = parseInt(document.getElementById('cfg-countdown').value);
+      config.facingMode = document.getElementById('cfg-facing').value;
+      config.isMirrored = document.getElementById('cfg-mirror').value === 'true';
+
+      localStorage.setItem('cfg_webhook', config.webhookUrl);
+      localStorage.setItem('cfg_countdown', config.countdownSeconds);
+      localStorage.setItem('cfg_facing', config.facingMode);
+      localStorage.setItem('cfg_mirror', config.isMirrored);
+
+      document.getElementById('admin-modal').style.display = 'none';
+      startCamera();
+    }
+
+    // 8. Générateur de secours de cadres PNG transparents 3:4
+    function generateBuiltInFrame(theme) {
+      const c = document.createElement('canvas');
+      c.width = 900;
+      c.height = 1200;
+      const ctx = c.getContext('2d');
+
+      const colorMap = {
+        orange: '#FF7518',
+        purple: '#8A2BE2',
+        red: '#DC143C'
+      };
+      const strokeColor = colorMap[theme] || '#FF7518';
+
+      ctx.clearRect(0, 0, 900, 1200);
+
+      // Bordure extérieure
+      ctx.lineWidth = 36;
+      ctx.strokeStyle = strokeColor;
+      ctx.strokeRect(18, 18, 900 - 36, 1200 - 36);
+
+      // Bandeau inférieur
+      ctx.fillStyle = strokeColor;
+      ctx.fillRect(0, 1200 - 140, 900, 140);
+
+      // Texte du bandeau
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 36px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('HALLOWEEN PHOTOBOOTH', 450, 1200 - 60);
+
+      // Toiles d'araignées dans les coins
+      ctx.lineWidth = 4;
+      [50, 100, 150].forEach(r => {
+        ctx.beginPath();
+        ctx.arc(36, 36, r, 0, Math.PI / 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(900 - 36, 36, r, Math.PI / 2, Math.PI);
+        ctx.stroke();
+      });
+
+      return c.toDataURL('image/png');
+    }
+  </script>
+</body>
+</html>
